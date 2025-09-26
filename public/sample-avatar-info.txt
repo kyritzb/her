@@ -1,0 +1,29 @@
+To get started, you need a VRM avatar file.
+
+Place your VRM file at: public/avatar.vrm
+
+Where to get VRM avatars:
+
+1. VRoid Studio (Free)
+   - Download: https://vroid.com/studio
+   - Create custom avatars and export as VRM
+
+2. Ready Player Me (Free)
+   - Website: https://readyplayer.me
+   - Generate avatars, then convert to VRM format
+
+3. Booth.pm (Paid)
+   - Website: https://booth.pm
+   - Search for "VRM" models
+
+4. VRChat (If you have permission)
+   - Export your existing VRChat avatars
+
+Sample VRM files for testing:
+- VRM Sample Models: https://github.com/vrm-c/vrm-specification/tree/master/samples
+
+Once you have a VRM file:
+1. Rename it to "avatar.vrm"
+2. Place it in the public/ folder
+3. Restart the development server
+4. Your avatar should load automatically!
