@@ -22,6 +22,7 @@ A Next.js application for programmatically controlling VRChat-style avatars in t
 
 ```bash
 npm install
+cd realtime-server && npm install && cd ..
 ```
 
 This will install:
@@ -40,6 +41,17 @@ Place a VRM file at `public/avatar.vrm`. You can get VRM avatars from:
 - **VRChat**: Export existing avatars (if you have permission)
 - **Booth.pm**: Purchase VRM-compatible models
 
+### 3. (Optional) Start the Realtime Viseme Server
+
+This repo includes a minimal Node.js WebSocket server that can broadcast viseme/phoneme events to the client. This is useful when integrating with external TTS/agents (e.g., ElevenLabs) that emit visemes.
+
+```bash
+cd realtime-server
+npm run dev
+```
+
+The client will try to connect to `ws://localhost:4001` by default. You can change this with `NEXT_PUBLIC_REALTIME_WS_URL`.
+
 ### 3. Run the Development Server
 
 ```bash
@@ -47,6 +59,23 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Realtime Visemes API
+
+The `realtime-server` exposes both WebSocket and HTTP endpoints:
+
+- WS: `ws://localhost:4001` — send JSON messages like:
+
+```json
+{ "type": "viseme", "viseme": "aa", "value": 0.9 }
+```
+
+- HTTP: `POST http://localhost:4001/viseme` with JSON body `{ viseme: string, value?: number }`
+- HTTP: `POST http://localhost:4001/phoneme` with JSON body `{ phoneme: string, value?: number }`
+
+Messages are broadcast to all connected clients. The client maps common visemes/phonemes to VRM expression keys: `aa, ee, ih, oh, ou` and decays them smoothly.
+
+To wire ElevenLabs, forward their realtime viseme/phoneme callbacks to the above endpoints.
 
 ### 4. Enable Microphone (Optional)
 

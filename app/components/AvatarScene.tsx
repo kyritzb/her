@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { VRMLoaderPlugin, VRM } from "@pixiv/three-vrm";
+import { VRMLoaderPlugin, VRM, VRMHumanBoneName } from "@pixiv/three-vrm";
 
 export default function AvatarScene() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -50,21 +50,11 @@ export default function AvatarScene() {
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // --- Animation System ---
+    // --- Load VRM ---
     let vrm: VRM | null = null;
-    let mixer: THREE.AnimationMixer | null = null;
-    let idleAction: THREE.AnimationAction | null = null;
-    let walkAction: THREE.AnimationAction | null = null;
-    let currentAnimation = "idle";
-    let isMoving = false;
-    
-    // Animation state
-    const animationState = {
-      idle: { weight: 1.0, action: null as THREE.AnimationAction | null },
-      walk: { weight: 0.0, action: null as THREE.AnimationAction | null },
-      wave: { weight: 0.0, action: null as THREE.AnimationAction | null }
-    };
-
+    // Breathing / pose support
+    let breathingBone: THREE.Object3D | null = null;
+    let baseChestX = 0;
     const loader = new GLTFLoader();
     loader.register((parser) => new VRMLoaderPlugin(parser));
 
@@ -82,14 +72,27 @@ export default function AvatarScene() {
         });
         vrm.scene.position.set(0, 0, 0);
         scene.add(vrm.scene);
-        
-        // Initialize animation mixer
-        mixer = new THREE.AnimationMixer(vrm.scene);
-        
-        // Create procedural animations
-        createProceduralAnimations();
-        
-        console.log("VRM loaded successfully with animations!");
+        console.log("VRM loaded successfully!");
+
+        // Light relax from T-pose: rotate upper arms slightly down
+        try {
+          const leftUpperArm = vrm.humanoid?.getBoneNode(
+            VRMHumanBoneName.LeftUpperArm
+          );
+          const rightUpperArm = vrm.humanoid?.getBoneNode(
+            VRMHumanBoneName.RightUpperArm
+          );
+          if (leftUpperArm) leftUpperArm.rotation.z = -0.6;
+          if (rightUpperArm) rightUpperArm.rotation.z = 0.6;
+
+          // Breathing on chest/spine
+          const chest = vrm.humanoid?.getBoneNode(VRMHumanBoneName.Chest);
+          const spine = vrm.humanoid?.getBoneNode(VRMHumanBoneName.Spine);
+          breathingBone = chest ?? spine ?? null;
+          baseChestX = breathingBone?.rotation.x ?? 0;
+        } catch {
+          // optional bones may not exist
+        }
       },
       (progress) => {
         console.log(
@@ -195,10 +198,11 @@ export default function AvatarScene() {
       }
     }
 
-    // --- Microphone lip-sync ---
+    // --- Microphone lip-sync (fallback when realtime is not connected) ---
     let audioCtx: AudioContext | null = null;
     let analyser: AnalyserNode | null = null;
     let dataArray: Uint8Array | null = null;
+    let timeDomainBuffer: Uint8Array | null = null;
     let mediaStream: MediaStream | null = null;
 
     async function initMic() {
@@ -218,6 +222,7 @@ export default function AvatarScene() {
         analyser.fftSize = 2048;
         analyser.smoothingTimeConstant = 0.8;
         dataArray = new Uint8Array(analyser.frequencyBinCount);
+        timeDomainBuffer = new Uint8Array(analyser.fftSize);
         src.connect(analyser);
 
         console.log("Microphone initialized for lip-sync");
@@ -236,20 +241,120 @@ export default function AvatarScene() {
     container.addEventListener("click", enableMic);
 
     function lipSync() {
-      if (!vrm?.expressionManager || !analyser || !dataArray) return;
+      if (!vrm?.expressionManager || !analyser || !timeDomainBuffer) return;
 
-      analyser.getByteTimeDomainData(dataArray);
+      (analyser as any).getByteTimeDomainData(timeDomainBuffer);
       let sum = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        const v = (dataArray[i] - 128) / 128;
+      for (let i = 0; i < timeDomainBuffer.length; i++) {
+        const v = (timeDomainBuffer[i] - 128) / 128;
         sum += v * v;
       }
-      const rms = Math.sqrt(sum / dataArray.length);
+      const rms = Math.sqrt(sum / timeDomainBuffer.length);
       const open = Math.min(1, rms * 8); // Adjust sensitivity as needed
 
       // VRM 1.0 preset often uses "aa" for mouth open
       vrm.expressionManager.setValue("aa", open);
     }
+
+    // --- Realtime visemes over WebSocket (for ElevenLabs or other sources) ---
+    let realtimeSocket: WebSocket | null = null;
+    let useRemoteVisemes = false;
+
+    // Track expression weights with decay for smooth visemes
+    const expressionWeights: Record<string, number> = {
+      aa: 0,
+      ee: 0,
+      ih: 0,
+      oh: 0,
+      ou: 0,
+    };
+
+    function visemeToExpressionKey(v: string): keyof typeof expressionWeights {
+      const s = (v || "").toLowerCase();
+      if (s === "a" || s === "aa") return "aa";
+      if (s === "e" || s === "ee") return "ee";
+      if (s === "i" || s === "ih") return "ih";
+      if (s === "o" || s === "oh") return "oh";
+      if (s === "u" || s === "ou") return "ou";
+      return "aa";
+    }
+
+    function phonemeToViseme(p: string): keyof typeof expressionWeights {
+      const s = (p || "").toLowerCase();
+      if (s === "a") return "aa";
+      if (s === "e") return "ee";
+      if (s === "i") return "ih";
+      if (s === "o") return "oh";
+      if (s === "u") return "ou";
+      return "aa";
+    }
+
+    function handleVisemeEvent(
+      kind: "viseme" | "phoneme",
+      value: string,
+      strength: number
+    ) {
+      const key =
+        kind === "viseme"
+          ? visemeToExpressionKey(value)
+          : phonemeToViseme(value);
+      expressionWeights[key] = Math.min(
+        1,
+        Math.max(expressionWeights[key], strength)
+      );
+    }
+
+    function updateRemoteVisemes(delta: number) {
+      if (!vrm?.expressionManager) return;
+      const decayPerSecond = 6.0;
+      (
+        Object.keys(expressionWeights) as (keyof typeof expressionWeights)[]
+      ).forEach((k) => {
+        const next = Math.max(0, expressionWeights[k] - decayPerSecond * delta);
+        expressionWeights[k] = next;
+        vrm!.expressionManager!.setValue(k, next);
+      });
+    }
+
+    function connectRealtime() {
+      try {
+        const wsUrl =
+          (process.env.NEXT_PUBLIC_REALTIME_WS_URL as string) ||
+          "ws://localhost:4001";
+        realtimeSocket = new WebSocket(wsUrl);
+        realtimeSocket.onopen = () => {
+          useRemoteVisemes = true;
+          console.log("Connected to realtime viseme server:", wsUrl);
+        };
+        realtimeSocket.onclose = () => {
+          useRemoteVisemes = false;
+          realtimeSocket = null;
+          console.log("Disconnected from realtime viseme server");
+        };
+        realtimeSocket.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data as string);
+            if (msg?.type === "viseme" && typeof msg.viseme === "string") {
+              handleVisemeEvent("viseme", msg.viseme, Number(msg.value ?? 1.0));
+            } else if (
+              msg?.type === "phoneme" &&
+              typeof msg.phoneme === "string"
+            ) {
+              handleVisemeEvent(
+                "phoneme",
+                msg.phoneme,
+                Number(msg.value ?? 1.0)
+              );
+            }
+          } catch {
+            // ignore malformed
+          }
+        };
+      } catch {
+        // ignore connect errors
+      }
+    }
+    connectRealtime();
 
     // --- Emotion controls ---
     function handleEmotions() {
@@ -290,7 +395,18 @@ export default function AvatarScene() {
 
       driveLocomotion(delta);
       doBlink(delta);
-      lipSync();
+      // Drive lips either from realtime visemes or fallback mic
+      if (useRemoteVisemes) {
+        updateRemoteVisemes(delta);
+      } else {
+        lipSync();
+      }
+
+      // Gentle breathing
+      if (breathingBone) {
+        breathingBone.rotation.x =
+          baseChestX + Math.sin(clock.elapsedTime * 1.2) * 0.015;
+      }
       handleEmotions();
 
       // Update VRM
@@ -320,6 +436,12 @@ export default function AvatarScene() {
       }
       if (audioCtx && audioCtx.state !== "closed") {
         audioCtx.close();
+      }
+
+      if (realtimeSocket) {
+        try {
+          realtimeSocket.close();
+        } catch {}
       }
 
       renderer.dispose();
