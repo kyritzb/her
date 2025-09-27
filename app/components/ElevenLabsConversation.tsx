@@ -17,6 +17,7 @@ export default function ElevenLabsConversation({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [isStartingSession, setIsStartingSession] = useState(false);
+  const [outputVolume, setOutputVolume] = useState(0);
   const realtimeWsRef = useRef<WebSocket | null>(null);
   const audioAnalysisRef = useRef<number | null>(null);
 
@@ -95,6 +96,26 @@ export default function ElevenLabsConversation({
       stopAudioAnalysis();
     }
   }, [conversation.isSpeaking]);
+
+  useEffect(() => {
+    let animationFrameId: number | null = null;
+
+    const updateVolume = () => {
+      const currentVolume = conversation.getOutputVolume();
+      setOutputVolume(Math.max(0, Math.min(1, currentVolume)));
+      animationFrameId = requestAnimationFrame(updateVolume);
+    };
+
+    if (isSessionActive) {
+      updateVolume();
+    }
+
+    return () => {
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [conversation, isSessionActive]);
 
   const connectRealtimeServer = () => {
     try {
@@ -418,7 +439,7 @@ export default function ElevenLabsConversation({
                 <div className="w-full bg-gray-700 rounded-full h-2">
                   <div
                     className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${(conversation.volume || 0) * 100}%` }}
+                    style={{ width: `${outputVolume * 100}%` }}
                   />
                 </div>
               </div>
