@@ -54,7 +54,7 @@ export default function ElevenLabsConversation({
       // This will be handled in the component render logic
     },
     // Add audio processing callback
-    onAudioData: (audioData) => {
+    onAudioData: (audioData: Float32Array) => {
       if (audioData && audioData.length > 0) {
         analyzeAudioForVisemes(audioData);
       }
