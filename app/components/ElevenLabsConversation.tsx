@@ -113,10 +113,7 @@ export default function ElevenLabsConversation({
       };
 
       realtimeWsRef.current.onerror = (error) => {
-        console.error(
-          "Realtime WebSocket error:",
-          error?.message || "Connection failed"
-        );
+        console.error("Realtime WebSocket error:", "Connection failed");
         addMessage("Avatar animation connection error");
       };
     } catch (error) {
