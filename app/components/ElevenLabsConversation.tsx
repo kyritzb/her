@@ -112,8 +112,11 @@ export default function ElevenLabsConversation({
         }, 3000);
       };
 
-      realtimeWsRef.current.onerror = (error) => {
-        console.error("Realtime WebSocket error:", "Connection failed");
+      realtimeWsRef.current.onerror = (event: Event) => {
+        const errorMessage =
+          event instanceof ErrorEvent ? event.message : "Connection failed";
+
+        console.error("Realtime WebSocket error:", errorMessage);
         addMessage("Avatar animation connection error");
       };
     } catch (error) {
