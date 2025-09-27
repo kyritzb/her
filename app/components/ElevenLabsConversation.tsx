@@ -15,6 +15,8 @@ export default function ElevenLabsConversation({
   const [messages, setMessages] = useState<string[]>([]);
   const [isMounted, setIsMounted] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSessionActive, setIsSessionActive] = useState(false);
+  const [isStartingSession, setIsStartingSession] = useState(false);
   const realtimeWsRef = useRef<WebSocket | null>(null);
   const audioAnalysisRef = useRef<number | null>(null);
 
@@ -25,12 +27,17 @@ export default function ElevenLabsConversation({
   // Use the ElevenLabs conversation hook
   const conversation = useConversation({
     onConnect: () => {
+      setIsSessionActive(true);
+      setIsStartingSession(false);
       addMessage("🔗 Connected to ElevenLabs agent");
     },
     onDisconnect: () => {
+      setIsSessionActive(false);
+      setIsStartingSession(false);
       addMessage("❌ Disconnected from ElevenLabs agent");
     },
     onError: (error: any) => {
+      setIsStartingSession(false);
       addMessage(
         `❌ Error: ${
           typeof error === "string" ? error : error?.message || "Unknown error"
@@ -95,12 +102,14 @@ export default function ElevenLabsConversation({
 
       realtimeWsRef.current.onopen = () => {
         setIsConnected(true);
+        setIsSessionActive(true);
         addMessage("Connected to avatar animation server");
         console.log("Connected to realtime WebSocket for avatar animation");
       };
 
       realtimeWsRef.current.onclose = () => {
         setIsConnected(false);
+        setIsSessionActive(false);
         addMessage("Disconnected from avatar animation server");
         console.log("Disconnected from realtime WebSocket");
 
@@ -118,6 +127,7 @@ export default function ElevenLabsConversation({
 
         console.error("Realtime WebSocket error:", errorMessage);
         addMessage("Avatar animation connection error");
+        setIsSessionActive(false);
       };
     } catch (error) {
       console.error("Failed to connect to realtime WebSocket:", error);
@@ -368,9 +378,17 @@ export default function ElevenLabsConversation({
               <span className="text-sm text-gray-300">
                 Status: {conversation.status || "Disconnected"}
               </span>
-              {!conversation.isConnected ? (
+              {!isSessionActive && !isStartingSession ? (
                 <Button
-                  onClick={() => conversation.startSession({ agentId })}
+                  onClick={async () => {
+                    try {
+                      setIsStartingSession(true);
+                      await conversation.startSession({ agentId });
+                    } catch (error) {
+                      console.error("Failed to start session", error);
+                      setIsStartingSession(false);
+                    }
+                  }}
                   className="bg-green-600 hover:bg-green-700 text-sm px-3 py-1"
                 >
                   Start Conversation
@@ -385,11 +403,13 @@ export default function ElevenLabsConversation({
               )}
             </div>
 
-            {conversation.isConnected && (
+            {isSessionActive && (
               <div className="text-center">
                 <div className="text-sm text-gray-400 mb-2">
                   {conversation.isSpeaking
                     ? "🎤 Listening..."
+                    : isStartingSession
+                    ? "⏳ Connecting..."
                     : "💬 Speak to the agent"}
                 </div>
                 <div className="w-full bg-gray-700 rounded-full h-2">
