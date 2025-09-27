@@ -49,12 +49,12 @@ export default function ElevenLabsConversation({
       }
     },
     onStatusChange: (status) => {
-      if (status.mode === "speaking") {
+      if (status.status === "speaking") {
         addMessage("🎵 Agent audio started");
         handleSpeechStart();
         // Start real-time audio analysis for mouth movements
         startAudioAnalysis();
-      } else if (status.mode === "listening") {
+      } else if (status.status === "listening") {
         addMessage("🎵 Agent audio ended");
         handleSpeechEnd();
         // Close mouth when speech ends
