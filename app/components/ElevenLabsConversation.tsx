@@ -383,7 +383,10 @@ export default function ElevenLabsConversation({
                   onClick={async () => {
                     try {
                       setIsStartingSession(true);
-                      await conversation.startSession({ agentId });
+                      await conversation.startSession({
+                        agentId,
+                        connectionType: "websocket",
+                      });
                     } catch (error) {
                       console.error("Failed to start session", error);
                       setIsStartingSession(false);
