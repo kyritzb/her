@@ -30,10 +30,10 @@ export default function ElevenLabsConversation({
     onDisconnect: () => {
       addMessage("❌ Disconnected from ElevenLabs agent");
     },
-    onError: (error) => {
+    onError: (error: any) => {
       addMessage(
         `❌ Error: ${
-          typeof error === "string" ? error : error.message || "Unknown error"
+          typeof error === "string" ? error : error?.message || "Unknown error"
         }`
       );
     },
