@@ -49,18 +49,9 @@ export default function ElevenLabsConversation({
       }
     },
     onStatusChange: (status) => {
-      if (status.status === "speaking") {
-        addMessage("🎵 Agent audio started");
-        handleSpeechStart();
-        // Start real-time audio analysis for mouth movements
-        startAudioAnalysis();
-      } else if (status.status === "listening") {
-        addMessage("🎵 Agent audio ended");
-        handleSpeechEnd();
-        // Close mouth when speech ends
-        handleViseme("sil", 0);
-        stopAudioAnalysis();
-      }
+      addMessage(`📊 Status changed to: ${status}`);
+      // Use conversation.isSpeaking to detect when agent is speaking
+      // This will be handled in the component render logic
     },
     // Add audio processing callback
     onAudioData: (audioData) => {
@@ -83,6 +74,20 @@ export default function ElevenLabsConversation({
       }
     };
   }, []);
+
+  // Monitor conversation speaking state for audio analysis
+  useEffect(() => {
+    if (conversation.isSpeaking) {
+      addMessage("🎵 Agent audio started");
+      handleSpeechStart();
+      startAudioAnalysis();
+    } else {
+      addMessage("🎵 Agent audio ended");
+      handleSpeechEnd();
+      handleViseme("sil", 0);
+      stopAudioAnalysis();
+    }
+  }, [conversation.isSpeaking]);
 
   const connectRealtimeServer = () => {
     try {
