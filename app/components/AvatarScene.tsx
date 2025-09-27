@@ -29,7 +29,7 @@ export default function AvatarScene() {
       0.1,
       100
     );
-    camera.position.set(0, 1.5, 2);
+    camera.position.set(0, 1.6, 0.5);
 
     // Lighting setup
     const hemi = new THREE.HemisphereLight(0xffffff, 0x222244, 1.0);
@@ -71,6 +71,7 @@ export default function AvatarScene() {
           }
         });
         vrm.scene.position.set(0, 0, 0);
+        vrm.scene.rotation.y = Math.PI; // Rotate 180 degrees horizontally
         scene.add(vrm.scene);
         console.log("VRM loaded successfully!");
 
@@ -149,7 +150,7 @@ export default function AvatarScene() {
       spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
 
       camera.position.setFromSpherical(spherical);
-      camera.lookAt(0, 1, 0);
+      camera.lookAt(0, 1.6, 0);
 
       mouse.x = e.clientX;
       mouse.y = e.clientY;
@@ -175,9 +176,9 @@ export default function AvatarScene() {
         dir.normalize().multiplyScalar(speed * delta);
         vrm.scene.position.add(dir);
 
-        // Face movement direction
+        // Face movement direction (accounting for 180-degree base rotation)
         const yaw = Math.atan2(dir.x, dir.z);
-        vrm.scene.rotation.y = yaw;
+        vrm.scene.rotation.y = yaw + Math.PI;
       }
     }
 
@@ -267,6 +268,7 @@ export default function AvatarScene() {
       ih: 0,
       oh: 0,
       ou: 0,
+      sil: 0, // silence
     };
 
     function visemeToExpressionKey(v: string): keyof typeof expressionWeights {
@@ -276,6 +278,7 @@ export default function AvatarScene() {
       if (s === "i" || s === "ih") return "ih";
       if (s === "o" || s === "oh") return "oh";
       if (s === "u" || s === "ou") return "ou";
+      if (s === "sil" || s === "silence") return "sil";
       return "aa";
     }
 
@@ -306,13 +309,23 @@ export default function AvatarScene() {
 
     function updateRemoteVisemes(delta: number) {
       if (!vrm?.expressionManager) return;
-      const decayPerSecond = 6.0;
+      const decayPerSecond = 8.0; // Faster decay for more responsive animation
+
       (
         Object.keys(expressionWeights) as (keyof typeof expressionWeights)[]
       ).forEach((k) => {
         const next = Math.max(0, expressionWeights[k] - decayPerSecond * delta);
         expressionWeights[k] = next;
-        vrm!.expressionManager!.setValue(k, next);
+
+        // Only set VRM expressions that exist (skip 'sil')
+        if (k !== "sil" && vrm!.expressionManager) {
+          try {
+            vrm!.expressionManager!.setValue(k, next);
+          } catch (error) {
+            // Expression might not exist in this VRM model
+            console.warn(`Expression '${k}' not found in VRM model`);
+          }
+        }
       });
     }
 
@@ -334,6 +347,8 @@ export default function AvatarScene() {
         realtimeSocket.onmessage = (ev) => {
           try {
             const msg = JSON.parse(ev.data as string);
+            console.log("Received viseme message:", msg);
+
             if (msg?.type === "viseme" && typeof msg.viseme === "string") {
               handleVisemeEvent("viseme", msg.viseme, Number(msg.value ?? 1.0));
             } else if (
@@ -345,9 +360,11 @@ export default function AvatarScene() {
                 msg.phoneme,
                 Number(msg.value ?? 1.0)
               );
+            } else if (msg?.type === "connection") {
+              console.log("Realtime server connection message:", msg.message);
             }
-          } catch {
-            // ignore malformed
+          } catch (error) {
+            console.warn("Failed to parse viseme message:", error);
           }
         };
       } catch {

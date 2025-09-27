@@ -24,6 +24,14 @@ const AvatarScene = dynamic(() => import("./components/AvatarScene"), {
   ),
 });
 
+// Dynamically import the ElevenLabs conversation component
+const ElevenLabsConversation = dynamic(
+  () => import("./components/ElevenLabsConversation"),
+  {
+    ssr: false,
+  }
+);
+
 export default function HomePage() {
   return (
     <main
@@ -32,9 +40,23 @@ export default function HomePage() {
         margin: 0,
         padding: 0,
         overflow: "hidden",
+        position: "relative",
       }}
     >
       <AvatarScene />
+
+      {/* ElevenLabs Conversation Overlay */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: "20px",
+          right: "20px",
+          width: "400px",
+          zIndex: 1000,
+        }}
+      >
+        <ElevenLabsConversation />
+      </div>
     </main>
   );
 }

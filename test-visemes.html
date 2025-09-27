@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viseme Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .connected { background: #2d5a2d; }
+        .disconnected { background: #5a2d2d; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4a4a4a;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover { background: #6a6a6a; }
+        #log {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 5px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>VRM Avatar Viseme Test</h1>
+    
+    <div id="status" class="status disconnected">
+        Status: Disconnected
+    </div>
+    
+    <div>
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+    
+    <h3>Test Visemes:</h3>
+    <div>
+        <button onclick="sendViseme('aa', 1.0)">AA (mouth open)</button>
+        <button onclick="sendViseme('ee', 1.0)">EE (smile)</button>
+        <button onclick="sendViseme('ih', 1.0)">IH (small open)</button>
+        <button onclick="sendViseme('oh', 1.0)">OH (round)</button>
+        <button onclick="sendViseme('ou', 1.0)">OU (pucker)</button>
+        <button onclick="sendViseme('sil', 0)">SIL (silence)</button>
+    </div>
+    
+    <h3>Test Sequences:</h3>
+    <div>
+        <button onclick="testSequence()">Test Sequence</button>
+        <button onclick="simulateSpeech()">Simulate Speech</button>
+    </div>
+    
+    <h3>Connection Log:</h3>
+    <div id="log"></div>
+
+    <script>
+        let ws = null;
+        const wsUrl = 'ws://localhost:4001';
+        
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function updateStatus(connected) {
+            const statusDiv = document.getElementById('status');
+            if (connected) {
+                statusDiv.textContent = 'Status: Connected to Realtime Server';
+                statusDiv.className = 'status connected';
+            } else {
+                statusDiv.textContent = 'Status: Disconnected';
+                statusDiv.className = 'status disconnected';
+            }
+        }
+        
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('Already connected');
+                return;
+            }
+            
+            log(`Connecting to ${wsUrl}...`);
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                log('Connected successfully!');
+                updateStatus(true);
+            };
+            
+            ws.onclose = () => {
+                log('Connection closed');
+                updateStatus(false);
+            };
+            
+            ws.onerror = (error) => {
+                log(`Connection error: ${error}`);
+                updateStatus(false);
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`Received: ${JSON.stringify(data)}`);
+                } catch (e) {
+                    log(`Received (raw): ${event.data}`);
+                }
+            };
+        }
+        
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+                log('Disconnected');
+                updateStatus(false);
+            }
+        }
+        
+        function sendViseme(viseme, value) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('Not connected! Please connect first.');
+                return;
+            }
+            
+            const message = {
+                type: 'viseme',
+                viseme: viseme,
+                value: value,
+                timestamp: Date.now()
+            };
+            
+            ws.send(JSON.stringify(message));
+            log(`Sent viseme: ${viseme} (${value})`);
+        }
+        
+        function testSequence() {
+            const visemes = [
+                { viseme: 'aa', value: 1.0, delay: 0 },
+                { viseme: 'ee', value: 0.8, delay: 500 },
+                { viseme: 'ih', value: 0.9, delay: 1000 },
+                { viseme: 'oh', value: 0.7, delay: 1500 },
+                { viseme: 'ou', value: 0.6, delay: 2000 },
+                { viseme: 'sil', value: 0, delay: 2500 }
+            ];
+            
+            log('Starting test sequence...');
+            visemes.forEach(({ viseme, value, delay }) => {
+                setTimeout(() => sendViseme(viseme, value), delay);
+            });
+        }
+        
+        function simulateSpeech() {
+            log('Simulating speech pattern...');
+            const speech = "Hello there! How are you doing today?";
+            const words = speech.split(' ');
+            let delay = 0;
+            
+            words.forEach(word => {
+                setTimeout(() => {
+                    log(`Speaking: "${word}"`);
+                    // Simple vowel detection for visemes
+                    for (let char of word.toLowerCase()) {
+                        setTimeout(() => {
+                            let viseme = 'aa';
+                            if ('aeiou'.includes(char)) {
+                                viseme = char === 'a' ? 'aa' : 
+                                        char === 'e' ? 'ee' : 
+                                        char === 'i' ? 'ih' : 
+                                        char === 'o' ? 'oh' : 'ou';
+                            }
+                            sendViseme(viseme, 0.7 + Math.random() * 0.3);
+                        }, delay);
+                        delay += 80;
+                    }
+                }, delay);
+                delay += 400;
+            });
+            
+            // Close mouth at end
+            setTimeout(() => sendViseme('sil', 0), delay + 200);
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        // Auto-connect on load
+        window.onload = () => {
+            log('Page loaded. Click Connect to start testing.');
+        };
+    </script>
+</body>
+</html>
