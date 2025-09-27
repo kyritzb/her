@@ -31,7 +31,11 @@ export default function ElevenLabsConversation({
       addMessage("❌ Disconnected from ElevenLabs agent");
     },
     onError: (error) => {
-      addMessage(`❌ Error: ${error.message}`);
+      addMessage(
+        `❌ Error: ${
+          typeof error === "string" ? error : error.message || "Unknown error"
+        }`
+      );
     },
     onMessage: (message) => {
       if (message.source === "ai") {
